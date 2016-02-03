@@ -1,4 +1,4 @@
-function [e,W,P,Et_df,E] = data_projections(X,fun,k,varargin)
+function [sub,e,W,P,Et_df,E] = data_projections(X,fun,k,varargin)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -48,7 +48,7 @@ else
     for i = 1:M
         for j=1:k
             % Sample the user provided function
-            Et_df(j,i) = 1/h*(fun(X(i,:)' + h*E(:,j,i))-fun(X(i,:)'));
+            Et_df(j,i) = 1/h*(fun(X(i,:) + h*E(:,j,i)')-fun(X(i,:)));
         end
 
         % Projection of compressed gradient measurement
@@ -56,5 +56,5 @@ else
     end
 
     % Run subspaces spectral decomposition
-    [e, W] = spectral_decomposition(P);
+    sub = compute(P);
 end

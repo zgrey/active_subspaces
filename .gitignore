@@ -44,3 +44,7 @@ nosetests.xml
 # Translations
 *.mo
 .eggs
+
+# Matlab autosave files
+*.m~
+*.asv
