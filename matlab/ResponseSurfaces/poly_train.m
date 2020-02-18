@@ -1,4 +1,4 @@
-function [Coef, B, g, H, f_hat, r] = poly_train(X, f, N)
+function [Coef, B, g, H, f_hat, res] = poly_train(X, f, d)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -10,7 +10,7 @@ function [Coef, B, g, H, f_hat, r] = poly_train(X, f, N)
 %             approximation such that m is the number of dimensions
 %          f: The M-by-1 vector of function values paired with the M
 %             observations of the training points in X
-%          N: An integer indicating the highest order of the polynomial
+%          p: An integer indicating the highest order of the polynomial
 %
 %   Outputs:
 %       Coef: The p-by-1 vector of coefficients obtained using the least
@@ -23,7 +23,7 @@ function [Coef, B, g, H, f_hat, r] = poly_train(X, f, N)
 %             2 monomials in the approximation
 %      f_hat: The M-by-1 approximation of the function evaluations at the
 %             training points
-%          r: The M-by-1 residuals defining the difference between the
+%        res: The M-by-1 residuals defining the difference between the
 %             approximations (f_hat) and the true function evaluations (f)
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -33,7 +33,7 @@ function [Coef, B, g, H, f_hat, r] = poly_train(X, f, N)
 [M, m] = size(X);
 
 % Obtain combinations of powers
-I = index_set('full', N, m);
+I = index_set('full', d, m);
 
 % Determine resulting dimension of approximation
 [~, p] = size(I);
@@ -50,10 +50,10 @@ Coef = (B'*B)\(B'*f);
 % Calculate 
 f_hat = B*Coef;
 
-r = f_hat-f;
+res = f - f_hat;
 
 % Organize Quadratic Forms
-if N==2
+if d==2
     % Get linear coefficients
     [r, c] = find(I(:, 2:m+1));
     g = Coef(2:m+1);

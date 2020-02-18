@@ -54,7 +54,7 @@ for i = 1:N
         count = count + 1;
         if count >= maxcount
             warning(['There are no more directions worth pursuing in hit and run.  Got ' num2str(i) ' samples.'])
-            Z(i:N, :) = repmat(z0', N-1, 1);
+            Z(i:N, :) = repmat(z0', N-i+1, 1);
             return
         end
     end
