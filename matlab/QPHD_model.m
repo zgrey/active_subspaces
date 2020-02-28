@@ -171,7 +171,7 @@ plot([surr2D.dom.ext(:,1); surr2D.dom.ext(1,1)],...
 plot([sub.CH(:,1); sub.CH(1,1)],...
      [sub.CH(:,2); sub.CH(1,2)],'k--','linewidth',1);
 % plot new active variable samples
-scatter(surr2D.dom.newY(:,1),surr2D.dom.newY(:,2),'k.');
+scatter(surr2D.dom.newY(:,1),surr2D.dom.newY(:,2),55,'ko');
 title(['2D Shadow Plot - Global Quadratic Model, R^2 = ' num2str(surr2D.Rsqd)]); colorbar;
 xlabel 'y_1 = w_1^Tx'; ylabel 'y_2 = w_2^Tx';
 

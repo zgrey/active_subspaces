@@ -30,7 +30,8 @@ clc; close all; clearvars; rng(42);
 % AS_HOME = '/local/tmp/active_subspaces/matlab/';
 % Windows
 % AS_HOME = 'C:\Users\zgrey\Documents\GitHub\active_subspaces\matlab\';
-AS_HOME = '.\matlab\';
+% AS_HOME = '.\matlab\';
+AS_HOME = '.\';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % add routines for surrogates and domains
@@ -48,11 +49,11 @@ N = 1000;
 % finite difference step size (isotropic coordinate perturbations)
 h = 1e-6;
 % try a deg-order polynomial surrogate
-deg = 3;
+deg = 5;
 % The number of ~Nnew^r active coordinates for improving the r-dim. surrogate
 Nnew = 10;
 % set the number of inactive samples to use in stretch sampling
-Nz = 100;
+Nz = 10;
 % given upper and lower bounds (replace these with your own domain def.):
 % ub = 2*ones(1,m); lb = ones(1,m);
 SNRu = 22*10^5*ones(1,16); SNRl = 0.0001*ones(1,16);
@@ -69,7 +70,7 @@ end
 M = diag(2./(ub - lb)); b = -M*mean([ub; lb],1)'; Minv = diag((ub-lb)/2);
 
 if log_scl == 1
-    % log-scale version
+    % original-scale samples
     X0 = exp(repmat(lb,N,1) + rand(N,m)*diag(ub - lb));
     % the log-scaled transformed samples become
     X = log(X0)*M + repmat(b',N,1);
@@ -87,8 +88,11 @@ end
 %% Collect function response
 %%%%%%%%%%%%%%%%%%%%%%%%%%% THINGS TO MODIFY %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % test function (QPHD and Finite Differences should be exact up to machine precision)
+% random linear function
 % a = 2*rand(m,1)-1; Pr_func = @(SNR,W,Mnw) [SNR,W,Mnw]*a; dF.true = repmat(a',N,1);
+% rank-2 quadratic coordinate aligned
 % a = [1 1 zeros(1,m-2)]; Pr_func =@(SNR,W,Mnw) sum([SNR,W,Mnw]*(diag(a)).*[SNR,W,Mnw],2); dF.true = 2*X0*diag(a);
+% rank-3 quadratic random
 % a = (2*rand(m,3)-1); Pr_func =@(SNR,W,Mnw) sum([SNR,W,Mnw]*(a*a').*[SNR,W,Mnw],2); dF.true = 2*X0*(a*a');
 % evaluate the function (replace this with your vector of responses)
 % F = Pr_func(X0(:,1:m-2),X0(:,m-1),X0(:,m));
@@ -163,7 +167,7 @@ surr2D.Fnew = f(surr2D.dom.newX0);
 % overlay new function evaluations
 figure(fig.shdw2D);
 scatter(surr2D.dom.newX*sub.W(:,1),surr2D.dom.newX*sub.W(:,2),50,'filled','cdata',surr2D.Fnew); alpha(0.5);
-% retrain surrogate
+% retrain surrogate with new stretch samples
 [surr2D.newCoef,~,~,~,surr2D.newHx,surr2D.newres] = poly_train([X; surr2D.dom.newX]*sub.W(:,1:2), [F; surr2D.Fnew], deg);
 % update the coefficient of determination
 surr2D.newRsqd = 1-cov(surr2D.newres)/cov([F; surr2D.Fnew]);
@@ -184,8 +188,11 @@ plot([surr2D.dom.ext(:,1); surr2D.dom.ext(1,1)],...
      [surr2D.dom.ext(:,2); surr2D.dom.ext(1,2)],'k','linewidth',2);
 contour(reshape(surr2D.dom.uniViz(:,1),100,100), reshape(surr2D.dom.uniViz(:,2),100,100), reshape(surr2D.newH,100,100),50);
 colorbar;
+% plot the edges of the projected data convex hull
+plot([sub.conH(:,1); sub.conH(1,1)],...
+     [sub.conH(:,2); sub.conH(1,2)],'k--','linewidth',1);
+% plot new active variable samples
+scatter(surr2D.dom.newY(:,1),surr2D.dom.newY(:,2),55,'ko');
 % format
 title(['2D Shadow Plot - ',sstype,' Model, R^2 = ', num2str(surr2D.newRsqd), ' (old ',num2str(surr2D.Rsqd),')']);
 xlabel 'y_1 = w_1^Tx'; ylabel 'y_2 = w_2^Tx';
-% clear warnings
-clc;
