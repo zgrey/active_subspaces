@@ -12,7 +12,6 @@ conH = sortrows([atan2(Y(ind,2),Y(ind,1)),Y(ind,:)]);
 conH = conH(:,2:end);
 
 %% uniformly discretize boundary of convex hull into Nbnd points
-% close discrete ordering of points
 conH = [conH; conH(1,:)];
 conmsh = uni2Dbnd(conH,Nbnd);
 

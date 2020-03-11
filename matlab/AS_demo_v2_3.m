@@ -31,7 +31,7 @@ clc; close all; clearvars; rng(42);
 % Windows
 % AS_HOME = 'C:\Users\zgrey\Documents\GitHub\active_subspaces\matlab\';
 % AS_HOME = '.\matlab\';
-AS_HOME = '.\';
+AS_HOME = './';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % add routines for surrogates and domains
@@ -42,6 +42,10 @@ addpath([AS_HOME,'Domains'])
 %%%%%%%%%%%%%%%%%%%%%%%%%%% THINGS TO MODIFY %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % select subspace approximation type ('QPHD' or 'FD')
 sstype = 'FD';
+% select differencing type ('fwd','bwd','cen')
+FDtype = 'bwd';
+% rank for activity score computation (pick this based on eigvalue gap, Figure 3)
+r = 2;
 % total number of parameters
 m = 18;
 % number of random samples 
@@ -51,10 +55,13 @@ h = 1e-6;
 % try a deg-order polynomial surrogate
 deg = 5;
 % The number of ~Nnew^r active coordinates for improving the r-dim. surrogate
-Nnew = 10;
+Nnew = 100;
 % set the number of inactive samples to use in stretch sampling
 Nz = 10;
 % given upper and lower bounds (replace these with your own domain def.):
+% labels
+par_lbl = {'SNR1' 'SNR2' 'SNR3' 'SNR4' 'SNR5' 'SNR6' 'SNR7'...
+           'SNR8' 'SNR9' 'SNR10' 'SNR11' 'SNR12' 'SNR13' 'SNR14' 'SNR15' 'SNR16' 'W' 'Mnw'};
 % ub = 2*ones(1,m); lb = ones(1,m);
 SNRu = 22*10^5*ones(1,16); SNRl = 0.0001*ones(1,16);
 ub = [SNRu 32 3]; lb = [SNRl 16 1];
@@ -104,11 +111,12 @@ p_cnw = 0.15;
 P_trnw = @(W,Mnw) 2*(1-2*p_cnw)./( (1-2*p_cnw).*(1 + W) + p_cnw*W.*(1 - (2*p_cnw).^Mnw ) );
 Pr_func = @(SNR,W,Mnw) sum(P_trnw(W,Mnw).*log2(1 + SNR),2);
 F = Pr_func(SNR,W,Mnw);
+
+% make Pr_func an ambiguous function handle f
+f = @(X) Pr_func(X(:,1:m-2),X(:,m-1),X(:,m));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Finite difference designs (using normalized scales)
-% make Pr_func a function handle f (assuming it is vectorized)
-f = @(X) Pr_func(X(:,1:m-2),X(:,m-1),X(:,m));
 % perturb all entries
 fwd = inv(X + h); bwd = inv(X - h);
 % preallocate
@@ -118,16 +126,25 @@ for j = 1:m
     % set entries to nominal random samples
     Xfwd = inv(X); Xbwd = inv(X);
     
-    % forward differencing
-    Xfwd(:,j) = fwd(:,j);
-    dF.fwd(:,j) = 1/h*(f(Xfwd) - f(inv(X)));
+    if strcmpi(FDtype,'fwd') || strcmpi(FDtype,'cen')
+        % forward differencing
+        Xfwd(:,j) = fwd(:,j);
+        dF.fwd(:,j) = 1/h*(f(Xfwd) - f(inv(X)));
+        dF.eval(:,j) = dF.fwd(:,j);
+    end
     
-    % backward differencing
-    Xbwd(:,j) = bwd(:,j);
-    dF.bwd(:,j) = 1/h*(f(inv(X)) - f(Xbwd));
+    if strcmpi(FDtype,'bwd') || strcmpi(FDtype,'cen')
+        % backward differencing
+        Xbwd(:,j) = bwd(:,j);
+        dF.bwd(:,j) = 1/h*(f(inv(X)) - f(Xbwd));
+        dF.eval(:,j) = dF.bwd(:,j);
+    end
 end
-% central differencing
-dF.cen = 0.5*(dF.fwd + dF.bwd);
+if strcmpi(FDtype,'cen')
+    % central differencing
+    dF.cen = 0.5*(dF.fwd + dF.bwd);
+    dF.eval = dF.cen;
+end
 
 if strcmpi(sstype,'QPHD')
 %% Global quadratic model (arbitrary rank "r" approximation, potentially biased)
@@ -137,14 +154,25 @@ if strcmpi(sstype,'QPHD')
 elseif strcmpi(sstype,'FD')
 %% Finite differences model (arbitrary rank "r" approximation, unbiased but requires differentiability)
 % dont forget the chain rule!
-[sub,surr1D,surr2D,fig] = FD_model(X,F,dF.cen,deg,Nnew,Nz);
+[sub,surr1D,surr2D,fig] = FD_model(X,F,dF.eval,deg,Nnew,Nz);
 end
 
+%% Sensitivity analysis
+sub.act_scr = sub.W(:,1:r).^2*sub.eigs(1:r);
+psort = sortrows([sub.act_scr,(1:m)']);
+% make a pareto
+figure; subplot(1,2,1), stem(psort(:,1),'filled'); alpha(0.5);
+axis([1,m,0,max(sub.act_scr)]); xlabel('param. index');
+ylabel('activity score'); 
+ax = subplot(1,2,2); pareto(psort(:,1),par_lbl(psort(:,2))); 
+gca; ylabel('activity score'); alpha(0.5); xtickangle(ax, 45);
+
+%% Stretch sampling
 % rescale stretch samples
 surr1D.dom.newX0 = inv(surr1D.dom.newX);
 surr2D.dom.newX0 = inv(surr2D.dom.newX);
 
-%% evaluate 1D stretch samples
+% evaluate 1D stretch samples
 surr1D.Fnew = f(surr1D.dom.newX0);
 % overlay new function evaluations
 figure(fig.shdw1D);
@@ -162,7 +190,7 @@ fig.shdw1D.CurrentAxes.YLim = [min(fig.shdw1D.CurrentAxes.YLim),...
 legend off;
 title(['1D Shadow Plot - ',sstype,' Model, R^2 = ', num2str(surr1D.newRsqd), ' (old ',num2str(surr1D.Rsqd),')']);
 
-%% evaluate 2D stretch samples
+% evaluate 2D stretch samples
 surr2D.Fnew = f(surr2D.dom.newX0);
 % overlay new function evaluations
 figure(fig.shdw2D);
