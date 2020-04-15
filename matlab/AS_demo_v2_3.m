@@ -37,15 +37,16 @@ AS_HOME = './';
 % add routines for surrogates and domains
 addpath([AS_HOME,'ResponseSurfaces'])
 addpath([AS_HOME,'Domains'])
+addpath([AS_HOME,'Plotters'])
 
 %% Generate samples from your domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%% THINGS TO MODIFY %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % select subspace approximation type ('QPHD' or 'FD')
 sstype = 'FD';
 % select differencing type ('fwd','bwd','cen')
-FDtype = 'bwd';
+FDtype = 'cen';
 % rank for activity score computation (pick this based on eigvalue gap, Figure 3)
-r = 2;
+r = 6;
 % total number of parameters
 m = 18;
 % number of random samples 
@@ -55,23 +56,25 @@ h = 1e-6;
 % try a deg-order polynomial surrogate
 deg = 5;
 % The number of ~Nnew^r active coordinates for improving the r-dim. surrogate
-Nnew = 100;
+Nnew = 50;
 % set the number of inactive samples to use in stretch sampling
-Nz = 10;
+Nz = 100;
 % given upper and lower bounds (replace these with your own domain def.):
 % labels
 par_lbl = {'SNR1' 'SNR2' 'SNR3' 'SNR4' 'SNR5' 'SNR6' 'SNR7'...
            'SNR8' 'SNR9' 'SNR10' 'SNR11' 'SNR12' 'SNR13' 'SNR14' 'SNR15' 'SNR16' 'W' 'Mnw'};
-% ub = 2*ones(1,m); lb = ones(1,m);
 SNRu = 22*10^5*ones(1,16); SNRl = 0.0001*ones(1,16);
 ub = [SNRu 32 3]; lb = [SNRl 16 1];
+% SEIR model bounds
+% par_lbl = {'\beta_1' '\beta_2' '\beta_3' 'p_1' 'p_2' '\gamma_1' '\gamma_2' '\gamma_3' '\mu'};
+% ub = ones(1,m); lb = 1e-4*ones(1,m);
 % try log-scales since your parameters appear as powers in the objective
 log_scl = true;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % log-scaling
 if log_scl == 1
-    ub = log([SNRu 32 3]); lb = log([SNRl 16 1]);
+    ub = log(ub); lb = log(lb);
 end
 % define an affine transformation x = M*x0 + b so that x in [-1,1]^m
 M = diag(2./(ub - lb)); b = -M*mean([ub; lb],1)'; Minv = diag((ub-lb)/2);
@@ -114,6 +117,11 @@ F = Pr_func(SNR,W,Mnw);
 
 % make Pr_func an ambiguous function handle f
 f = @(X) Pr_func(X(:,1:m-2),X(:,m-1),X(:,m));
+
+% Basic reproduction number
+% b1/(p1 + g1) * (1 + p1/(p2 + g2)*b2/b1*(1+p2/(mu + g3)*b3/b2))
+% f = @(X) log(X(:,1)./(X(:,4) + X(:,6)).*(1 + X(:,4)./(X(:,5) + X(:,7)).*X(:,2)./X(:,1).*(1 + X(:,5)./(X(:,9) + X(:,8)).*X(:,3)./X(:,2))));
+% F = f(X0);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Finite difference designs (using normalized scales)
@@ -161,7 +169,7 @@ end
 sub.act_scr = sub.W(:,1:r).^2*sub.eigs(1:r);
 psort = sortrows([sub.act_scr,(1:m)']);
 % make a pareto
-figure; subplot(1,2,1), stem(psort(:,1),'filled'); alpha(0.5);
+figure; subplot(1,2,1), stem(sub.act_scr,'filled'); alpha(0.5);
 axis([1,m,0,max(sub.act_scr)]); xlabel('param. index');
 ylabel('activity score'); 
 ax = subplot(1,2,2); pareto(psort(:,1),par_lbl(psort(:,2))); 
@@ -224,3 +232,24 @@ scatter(surr2D.dom.newY(:,1),surr2D.dom.newY(:,2),55,'ko');
 % format
 title(['2D Shadow Plot - ',sstype,' Model, R^2 = ', num2str(surr2D.newRsqd), ' (old ',num2str(surr2D.Rsqd),')']);
 xlabel 'y_1 = w_1^Tx'; ylabel 'y_2 = w_2^Tx';
+
+% try a surface/mesh plot (better visualization of residuals)
+figure;
+scatter3([X; surr2D.dom.newX]*sub.W(:,1),[X; surr2D.dom.newX]*sub.W(:,2), [F; surr2D.Fnew], 'filled','cdata',[F; surr2D.Fnew]); alpha(0.5);
+hold on;
+mesh(reshape(surr2D.dom.uniViz(:,1),100,100), reshape(surr2D.dom.uniViz(:,2),100,100), reshape(surr2D.newH,100,100),'facealpha',0.5);
+xlabel 'y_1 = w_1^Tx'; ylabel 'y_2 = w_2^Tx'; zlabel 'f';
+
+% 3-dimensional shadow plot visualizations
+Nshp = 100;
+[Y1,Y2,Y3] = meshgrid(linspace(min([X; surr2D.dom.newX]*sub.W(:,1)),max([X; surr2D.dom.newX]*sub.W(:,1)),Nshp),...
+                      linspace(min([X; surr2D.dom.newX]*sub.W(:,2)),max([X; surr2D.dom.newX]*sub.W(:,2)),Nshp),...
+                      linspace(min([X; surr2D.dom.newX]*sub.W(:,3)),max([X; surr2D.dom.newX]*sub.W(:,3)),Nshp));
+Y = [reshape(Y1,Nshp^3,1), reshape(Y2,Nshp^3,1), reshape(Y3,Nshp^3,1)];
+[surr3D.Coef,~,~,~,surr3D.newHx,surr3D.res] = poly_train([X; surr2D.dom.newX]*sub.W(:,1:3), [F; surr2D.Fnew], deg);
+% update the coefficient of determination
+surr3D.Rsqd = 1-cov(surr3D.res)/cov([F; surr2D.Fnew]);
+IsoShadow(Y1, Y2, Y3, poly_predict(Y,surr3D.Coef,deg), 3,[min([F; surr2D.Fnew]), max([F; surr2D.Fnew])]); axis equal; hold on; view([0 0 1]);
+scatter3([X; surr2D.dom.newX]*sub.W(:,1),[X; surr2D.dom.newX]*sub.W(:,2), [X; surr2D.dom.newX]*sub.W(:,3),100, 'filled','cdata',[F; surr2D.Fnew]); alpha(0.5);
+title(['3D Shadow Plot - ',sstype,' Model, R^2 = ', num2str(surr3D.Rsqd)]);
+xlabel 'y_1 = w_1^Tx'; ylabel 'y_2 = w_2^Tx'; zlabel 'y3 = w_3^Tx';
